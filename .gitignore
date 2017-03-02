@@ -1,0 +1,10 @@
+.omv/
+.ssh/
+.vagrant/
+old/
+tmp/
+*_stringer.go
+gd3
+gd3.static
+gd3.iml
+rpmbuild/

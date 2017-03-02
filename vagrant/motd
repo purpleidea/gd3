@@ -1,0 +1,14 @@
+Welcome to the gd3 hacking VM.
+
+Please make sure that your authorized key for GitHub is added to the SSH agent
+on the host machine (see `ssh-add -l`).
+
+You can jump into the gd3 repo with the alias `cdgd3`.
+
+To get started, try:
+
+$ cdgd3
+$ make clean build
+$ # hack hack hack...
+
+Enjoy!

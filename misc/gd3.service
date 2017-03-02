@@ -1,0 +1,13 @@
+[Unit]
+Description=Run GlusterFS storage management with gd3
+Documentation=https://github.com/purpleidea/gd3/
+After=systemd-networkd.service
+Requires=systemd-networkd.service
+
+[Service]
+ExecStart=/usr/bin/gd3 run $OPTS
+RestartSec=5s
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

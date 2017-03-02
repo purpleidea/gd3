@@ -1,0 +1,34 @@
+language: go
+go:
+  - 1.6
+  - 1.7
+  - 1.8
+  - tip
+sudo: true
+dist: trusty
+before_install:
+  - sudo apt update
+  - git fetch --unshallow
+install: 'make deps'
+script: 'make test'
+matrix:
+  fast_finish: true
+  allow_failures:
+    - go: tip
+    - go: 1.8
+notifications:
+  irc:
+    channels:
+      - "irc.freenode.net#mgmtconfig"
+    template:
+      - "%{repository} (%{commit}: %{author}): %{message}"
+      - "More info : %{build_url}"
+    on_success: always
+    on_failure: always
+    use_notice: false
+    skip_join: false
+  email:
+    recipients:
+      - travis-ci@shubin.ca
+    on_failure: change
+    on_success: change
