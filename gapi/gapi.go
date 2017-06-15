@@ -116,7 +116,10 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 		return nil, fmt.Errorf("%s: Gd3GAPI is not initialized", obj.Program)
 	}
 
-	g := pgraph.NewGraph(obj.Program)
+	g, err := pgraph.NewGraph(obj.Program)
+	if err != nil {
+		return nil, errwrap.Wrapf(err, "error creating graph")
+	}
 	defaultMetaParams := resources.DefaultMetaParams
 
 	// XXX: hard coded for now, easy to store in etcd and populate from initial peer
@@ -165,7 +168,7 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 
 	// key value state resource
 	one := "1" // "hello, i'm available for this cluster"
-	kv1 := pgraph.NewVertex(&resources.KVRes{
+	kv1 := &resources.KVRes{
 		BaseRes: resources.BaseRes{
 			Name:       "kv1",
 			MetaParams: defaultMetaParams,
@@ -173,51 +176,51 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 		Key:          worldNamespace,
 		Value:        &one,
 		SkipLessThan: true, // allow upgrades to two
-	})
+	}
 	g.AddVertex(kv1)
 	if !stageOne { // wait for everyone to be at stage one for no particular reason
 		return g, nil
 	}
 
-	//pkg0 := pgraph.NewVertex(&resources.PkgRes{
+	//pkg0 := &resources.PkgRes{
 	//	BaseRes: resources.BaseRes{
 	//		Name:       pkgName0,
 	//		MetaParams: defaultMetaParams,
 	//	},
 	//	State: "installed",
-	//})
+	//}
 	//g.AddVertex(pkg0)
 	// NOTE: we should do this in parallel, but let's explicitly hello first
 	// for the purposes of this demo.
 	//g.AddEdge(kv1, pkg0, pgraph.NewEdge("kv1->pkg0"))
 
 	// glusterfs package which includes the glusterfsd binary
-	pkg := pgraph.NewVertex(&resources.PkgRes{
+	pkg := &resources.PkgRes{
 		BaseRes: resources.BaseRes{
 			Name:       pkgName,
 			MetaParams: defaultMetaParams,
 		},
 		State: "installed",
-	})
+	}
 	g.AddVertex(pkg)
 	//g.AddEdge(pkg0, pkg, pgraph.NewEdge("pkg0->pkg"))
-	g.AddEdge(kv1, pkg, pgraph.NewEdge("kv1->pkg"))
+	g.AddEdge(kv1, pkg, &resources.Edge{Name: "kv1->pkg"})
 
 	// var directory
-	d0 := pgraph.NewVertex(&resources.FileRes{
+	d0 := &resources.FileRes{
 		BaseRes: resources.BaseRes{
 			Name:       pathVarLibGlusterd, // directory
 			MetaParams: defaultMetaParams,
 		},
 		//Path: pathVarLibGlusterd,
 		State: "present",
-	})
+	}
 	g.AddVertex(d0)
-	g.AddEdge(pkg, d0, pgraph.NewEdge("pkg->d0"))
+	g.AddEdge(pkg, d0, &resources.Edge{Name: "pkg->d0"})
 
 	// key value state resource
 	two := "2"
-	kv2 := pgraph.NewVertex(&resources.KVRes{
+	kv2 := &resources.KVRes{
 		BaseRes: resources.BaseRes{
 			Name:       "kv2",
 			MetaParams: defaultMetaParams,
@@ -225,12 +228,12 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 		Key:          worldNamespace,
 		Value:        &two,
 		SkipLessThan: true, // allow upgrades to three or higher
-	})
+	}
 	g.AddVertex(kv2)
-	g.AddEdge(kv1, kv2, pgraph.NewEdge("kv1->kv2")) // for safety
+	g.AddEdge(kv1, kv2, &resources.Edge{Name: "kv1->kv2"}) // for safety
 
 	three := "3"
-	kv3 := pgraph.NewVertex(&resources.KVRes{
+	kv3 := &resources.KVRes{
 		BaseRes: resources.BaseRes{
 			Name:       "kv3",
 			MetaParams: defaultMetaParams,
@@ -238,17 +241,17 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 		Key:          worldNamespace,
 		Value:        &three,
 		SkipLessThan: true, // allow upgrades to three or higher
-	})
+	}
 	g.AddVertex(kv3)
-	g.AddEdge(kv2, kv3, pgraph.NewEdge("kv2->kv3")) // for safety
+	g.AddEdge(kv2, kv3, &resources.Edge{Name: "kv2->kv3"}) // for safety
 
-	dr := pgraph.NewVertex(&resources.ExecRes{
+	dr := &resources.ExecRes{
 		BaseRes: resources.BaseRes{
 			Name:       "reload systemd user units",
 			MetaParams: defaultMetaParams,
 		},
-		Cmd:   "/usr/bin/systemctl --user daemon-reload",
-	})
+		Cmd: "/usr/bin/systemctl --user daemon-reload",
+	}
 	g.AddVertex(dr)
 
 	for i := 0; i < brickCount; i++ {
@@ -289,7 +292,7 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 		content := string(outBytes)
 
 		// brick unit file
-		bf := pgraph.NewVertex(&resources.FileRes{
+		bf := &resources.FileRes{
 			BaseRes: resources.BaseRes{
 				Name:       fullPath,
 				MetaParams: defaultMetaParams,
@@ -297,17 +300,17 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 			Path:    fullPath,
 			State:   "present",
 			Content: &content,
-		})
+		}
 		g.AddVertex(bf)
-		g.AddEdge(kv2, bf, pgraph.NewEdge(fmt.Sprintf("kv2->bf%d", i)))
-		edge := pgraph.NewEdge(fmt.Sprintf("bf%d->dr", i))
+		g.AddEdge(kv2, bf, &resources.Edge{Name: fmt.Sprintf("kv2->bf%d", i)})
+		edge := &resources.Edge{Name: fmt.Sprintf("bf%d->dr", i)}
 		edge.Notify = true // send a notification from brick file to exec reloader
 		g.AddEdge(bf, dr, edge)
 
 		if stageTwo {
 			// glusterfsd service
 			// bonus: now we can use cgroups to limit all these!!!
-			svc := pgraph.NewVertex(&resources.SvcRes{
+			svc := &resources.SvcRes{
 				BaseRes: resources.BaseRes{
 					Name:       unitName, // no .service postfix
 					MetaParams: defaultMetaParams,
@@ -315,16 +318,16 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 				State:   "running", // TODO: upstream should use a constant
 				Startup: "enabled",
 				Session: true, // user services that don't run as root!
-			})
+			}
 			g.AddVertex(svc)
-			g.AddEdge(bf, svc, pgraph.NewEdge(fmt.Sprintf("bf%d->svc%d", i, i)))
-			g.AddEdge(dr, svc, pgraph.NewEdge(fmt.Sprintf("dr->svc%d", i))) // reload before svc
-			g.AddEdge(svc, kv3, pgraph.NewEdge(fmt.Sprintf("svc%d->kv3", i)))
+			g.AddEdge(bf, svc, &resources.Edge{Name: fmt.Sprintf("bf%d->svc%d", i, i)})
+			g.AddEdge(dr, svc, &resources.Edge{Name: fmt.Sprintf("dr->svc%d", i)}) // reload before svc
+			g.AddEdge(svc, kv3, &resources.Edge{Name: fmt.Sprintf("svc%d->kv3", i)})
 		}
 
 		// TODO: build a proper brick resource instead
-		//brickRes := pgraph.NewVertex(&brick.BrickRes{
-		//})
+		//brickRes := &brick.BrickRes{
+		//}
 		//g.AddVertex(brickRes)
 	}
 
@@ -345,9 +348,9 @@ func (obj *Gd3GAPI) Graph() (*pgraph.Graph, error) {
 }
 
 // Next returns nil errors every time there could be a new graph.
-func (obj *Gd3GAPI) Next() chan error {
+func (obj *Gd3GAPI) Next() chan gapi.Next {
 	// TODO: should we use obj.data.NoConfigWatch & obj.data.NoStreamWatch ?
-	ch := make(chan error)
+	ch := make(chan gapi.Next)
 	stringChan := obj.data.World.StrMapWatch(worldNamespace) // watch for var changes
 
 	obj.wg.Add(1)
@@ -355,30 +358,39 @@ func (obj *Gd3GAPI) Next() chan error {
 		defer obj.wg.Done()
 		defer close(ch) // this will run before the obj.wg.Done()
 		if !obj.initialized {
-			ch <- fmt.Errorf("%s: Gd3GAPI is not initialized", obj.Program)
+			next := gapi.Next{
+				Err:  fmt.Errorf("%s: Gd3GAPI is not initialized", obj.Program),
+				Exit: true, // exit, b/c programming error?
+			}
+			ch <- next
 			return
 		}
 		startChan := make(chan struct{}) // start signal
 		close(startChan)                 // kick it off!
 
 		for {
-			var x error
+			var err error
 			var ok bool
 			select {
 			case <-startChan: // kick the loop once at start
 				startChan = nil // disable
 
 			// will delays here block etcd? (no b/c stringChan is buffered!)
-			case x, ok = <-stringChan:
+			case err, ok = <-stringChan:
 				if !ok { // channel closed
 					return
 				}
 			case <-obj.closeChan:
 				return
 			}
+
 			log.Printf("%s: Generating new graph...", obj.Program)
+			next := gapi.Next{
+				//Exit: true, // TODO: for permanent shutdown!
+				Err: err,
+			}
 			select {
-			case ch <- x: // trigger a run
+			case ch <- next: // trigger a run
 			case <-obj.closeChan:
 				return
 			}
